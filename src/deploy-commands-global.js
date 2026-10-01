@@ -1,0 +1,47 @@
+const { REST, Routes, RESTEvents } = require('discord.js');
+const { clientId, token } = require('./config/config.json');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const commands = [];
+const foldersPath = path.join(__dirname, 'commands');
+const commandFolders = fs.readdirSync(foldersPath);
+
+for (const folder of commandFolders) {
+    const commandsPath = path.join(foldersPath, folder);
+    const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
+    for (const file of commandFiles) {
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            commands.push(command.data.toJSON());
+        } else {
+            console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
+        }
+    }
+}
+
+// Construct and prepare an instance of the REST module
+const rest = new REST().setToken(token);
+
+// Attach the rate-limit listener to THIS rest instance (the one actually used below)
+rest.on(RESTEvents.Response, (request, response) => {
+    if (response.status !== 403 && response.status !== 429) return;
+
+    console.log('Discord API request was limited.');
+});
+
+(async () => {
+    try {
+        console.log(`Started refreshing ${commands.length} application (/) commands.`);
+        console.log('Commands to be deployed:');
+        commands.forEach((cmd) => console.log(`  - /${cmd.name}`));
+
+        const data = await rest.put(Routes.applicationCommands(clientId), { body: commands });
+
+        console.log(`\nSuccessfully reloaded ${data.length} application (/) commands:`);
+        data.forEach((cmd) => console.log(`  - /${cmd.name} (ID: ${cmd.id})`));
+    } catch (error) {
+        console.error(error);
+    }
+})();

@@ -1,0 +1,93 @@
+const Database = require('better-sqlite3');
+const path = require('node:path');
+const fs = require('node:fs');
+
+// Ensure the data folder exists before creating the DB file there
+const dataDir = path.join(__dirname, '../../data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const db = new Database(path.join(dataDir, 'nyra.db'));
+
+// Recommended for better performance with concurrent reads/writes
+db.pragma('journal_mode = WAL');
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS warns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guildId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        moderatorId TEXT NOT NULL,
+        reason TEXT,
+        type TEXT NOT NULL DEFAULT 'manual',
+        timestamp INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS levels (
+        guildId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        xp INTEGER NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 0,
+        lastMessage INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guildId, userId)
+    );
+
+    CREATE TABLE IF NOT EXISTS voice_sessions (
+        guildId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        joinedAt INTEGER NOT NULL,
+        PRIMARY KEY (guildId, userId)
+    );
+    
+    CREATE TABLE IF NOT EXISTS stat_channels (
+        guildId TEXT NOT NULL,
+        key TEXT NOT NULL,
+        channelId TEXT NOT NULL,
+        PRIMARY KEY (guildId, key)
+    );
+    
+    CREATE TABLE IF NOT EXISTS giveaways (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guildId TEXT NOT NULL,
+        channelId TEXT NOT NULL,
+        messageId TEXT,
+        hostId TEXT NOT NULL,
+        prize TEXT NOT NULL,
+        winnerCount INTEGER NOT NULL DEFAULT 1,
+        requirements TEXT NOT NULL DEFAULT '{}',
+        endTime INTEGER NOT NULL,
+        ended INTEGER NOT NULL DEFAULT 0,
+        winners TEXT NOT NULL DEFAULT '[]'
+    );
+
+    CREATE TABLE IF NOT EXISTS giveaway_entries (
+        giveawayId INTEGER NOT NULL,
+        userId TEXT NOT NULL,
+        enteredAt INTEGER NOT NULL,
+        PRIMARY KEY (giveawayId, userId)
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_messages (
+        guildId TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guildId, userId, date)
+    );
+    
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guildId TEXT PRIMARY KEY,
+        welcomeChannelId TEXT,
+        levelUpChannelId TEXT
+    );
+`);
+
+// Alterations go here.
+try { 
+    return;
+}
+catch (error) {
+    console.error('Error occurred while altering guild_settings table:', error);
+}
+module.exports = db;
