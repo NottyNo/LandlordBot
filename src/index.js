@@ -45,11 +45,23 @@ const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.j
 for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
     const event = require(filePath);
+    const listener = async (...args) => {
+        try {
+            await event.execute(...args);
+        } catch (error) {
+            console.error(`Event ${event.name} failed:`, error);
+        }
+    };
     if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args));
+        client.once(event.name, listener);
     } else {
-        client.on(event.name, (...args) => event.execute(...args));
+        client.on(event.name, listener);
     }
 }
 
-client.login(token);
+client.on('error', (error) => console.error('Discord client error:', error));
+client.login(token).catch((error) => {
+    console.error('Discord login failed:', error);
+    client.destroy();
+    process.exitCode = 1;
+});

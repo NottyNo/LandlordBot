@@ -4,7 +4,7 @@ const db = require('../database/db');
 const { colors: { embed: embedColor } } = require('../config/colors.json');
 
 // Resolves relative to THIS file's location, not the process's working directory
-const WELCOME_IMAGE_PATH = path.join(__dirname, '../images/welcome.png');
+const WELCOME_IMAGE_PATH = path.join(__dirname, '../images/welcome.gif');
 
 module.exports = {
     name: Events.GuildMemberAdd,
@@ -36,6 +36,7 @@ module.exports = {
             await channel.send({ embeds: [embed], files: [attachment] });
         } catch (error) {
             console.warn('Welcome gif could not be loaded, sending without it:', error.message);
+            embed.setImage(null);
             await channel.send({ embeds: [embed] }).catch(() => {});
         }
     },

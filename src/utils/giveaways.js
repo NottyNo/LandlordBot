@@ -1,22 +1,21 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../database/db');
-const { xpForLevel } = require('./xp');
+const { randomInt } = require('node:crypto');
 
 function parseDuration(input) {
+    if (typeof input !== 'string' || !/^(?:\d+\s*[dhms]\s*)+$/i.test(input.trim())) return null;
     const regex = /(\d+)\s*(d|h|m|s)/gi;
     let match;
     let totalMs = 0;
-    let matched = false;
 
     while ((match = regex.exec(input)) !== null) {
-        matched = true;
         const value = parseInt(match[1], 10);
         const unit = match[2].toLowerCase();
         const multipliers = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
         totalMs += value * multipliers[unit];
     }
 
-    return matched ? totalMs : null;
+    return Number.isSafeInteger(totalMs) && totalMs > 0 && totalMs <= 365 * 86400000 ? totalMs : null;
 }
 
 function buildRequirements(options) {
@@ -143,41 +142,56 @@ function buildGiveawayEmbed(row, guild, embedColor, ended = false) {
 
 function pickWinners(entryUserIds, count, exclude = []) {
     const pool = entryUserIds.filter((id) => !exclude.includes(id));
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = randomInt(i + 1);
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, count);
 }
 
-async function endGiveaway(client, row) {
-    db.prepare(`UPDATE giveaways SET ended = 1 WHERE id = ?`).run(row.id);
+// shortcut: delivery locking is per process; use a database lease before running multiple bot processes.
+const deliveries = new Map();
 
-    const entries = db.prepare(`SELECT userId FROM giveaway_entries WHERE giveawayId = ?`).all(row.id)
-        .map((e) => e.userId);
+function endGiveaway(client, row) {
+    if (deliveries.has(row.id)) return deliveries.get(row.id);
 
-    const winnerIds = pickWinners(entries, row.winnerCount);
-    db.prepare(`UPDATE giveaways SET winners = ? WHERE id = ?`).run(JSON.stringify(winnerIds), row.id);
+    const delivery = Promise.resolve().then(async () => {
+        const current = db.transaction(() => {
+            const saved = db.prepare('SELECT * FROM giveaways WHERE id = ?').get(row.id);
+            if (!saved) throw new Error(`Giveaway #${row.id} not found`);
+            if (!saved.ended) {
+                const entries = db.prepare('SELECT userId FROM giveaway_entries WHERE giveawayId = ?')
+                    .all(saved.id).map((entry) => entry.userId);
+                saved.winners = JSON.stringify(pickWinners(entries, saved.winnerCount));
+                db.prepare('UPDATE giveaways SET ended = 1, winners = ? WHERE id = ?')
+                    .run(saved.winners, saved.id);
+                saved.ended = 1;
+            }
+            return saved;
+        })();
+        if (current.announced) return;
 
-    const updatedRow = { ...row, ended: 1, winners: JSON.stringify(winnerIds) };
+        const channel = await client.channels.fetch(current.channelId);
+        if (!channel) throw new Error(`Giveaway channel ${current.channelId} not found`);
+        const message = current.messageId ? await channel.messages.fetch(current.messageId).catch((error) => {
+            if (error.code === 10008) return null; // Deleted messages cannot be updated.
+            throw error;
+        }) : null;
+        const embed = buildGiveawayEmbed(current, channel.guild, 0x2ecc71, true);
+        if (message) {
+            await message.edit({ embeds: [embed], components: buildGiveawayComponents(current.id, true) });
+        }
 
-    const channel = await client.channels.fetch(row.channelId).catch(() => null);
-    if (!channel) return;
+        const winnerIds = JSON.parse(current.winners);
+        // shortcut: a crash after send but before saving can duplicate the announcement; add delivery deduplication if needed.
+        await channel.send(winnerIds.length
+            ? `🎉 Congratulations ${winnerIds.map((id) => `<@${id}>`).join(', ')}! You won **${current.prize}**!`
+            : `😔 No valid entries for **${current.prize}** — no winner could be picked.`);
+        db.prepare('UPDATE giveaways SET announced = 1 WHERE id = ?').run(current.id);
+    }).finally(() => deliveries.delete(row.id));
 
-    const guild = channel.guild;
-    const message = row.messageId ? await channel.messages.fetch(row.messageId).catch(() => null) : null;
-
-    const embed = buildGiveawayEmbed(updatedRow, guild, 0x2ecc71, true);
-    const components = buildGiveawayComponents(row.id, true);
-
-    if (message) {
-        await message.edit({ embeds: [embed], components }).catch(() => {});
-    }
-
-    if (winnerIds.length > 0) {
-        await channel.send(
-            `🎉 Congratulations ${winnerIds.map((id) => `<@${id}>`).join(', ')}! You won **${row.prize}**!`
-        ).catch(() => {});
-    } else {
-        await channel.send(`😔 No valid entries for **${row.prize}** — no winner could be picked.`).catch(() => {});
-    }
+    deliveries.set(row.id, delivery);
+    return delivery;
 }
 
 module.exports = {

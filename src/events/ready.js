@@ -17,8 +17,12 @@ module.exports = {
         client.user.setPresence({ activities: [activities[i]], status: 'online' });
 
         setInterval(() => {
-            i = (i + 1) % activities.length;
-            client.user.setPresence({ activities: [activities[i]], status: 'online' });
+            try {
+                i = (i + 1) % activities.length;
+                client.user.setPresence({ activities: [activities[i]], status: 'online' });
+            } catch (error) {
+                console.error('Presence update failed:', error);
+            }
         }, 30000); // rotate every 30 seconds
 		 // Clear any stale sessions from before the restart
         db.prepare(`DELETE FROM voice_sessions`).run();

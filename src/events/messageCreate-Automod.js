@@ -35,8 +35,8 @@ async function issueAutomodWarn(message, reason, options = {}) {
     `).get(message.guild.id, message.author.id).count;
 
     // Send the warning privately via DM instead of in the channel and log to console
+    console.log(`Sending automod warning to ${message.author.tag} (${message.author.id}): ${reason} : Warning #${warnCount}`);
     await message.author.send(
-        console.log(`Sending automod warning to ${message.author.tag} (${message.author.id}): ${reason} : Warning #${warnCount}`),
         `⚠️ You were warned in **${message.guild.name}**: ${reason.toLowerCase()}! (Warning ${warnCount})`
     ).catch(() => {
         // User has DMs disabled or blocked the bot
@@ -63,11 +63,15 @@ function scheduleSpamWarnDecay(guildId, userId) {
     }
 
     const timer = setTimeout(() => {
-        db.prepare(`
-            DELETE FROM warns WHERE guildId = ? AND userId = ? AND type = 'spam'
-        `).run(guildId, userId);
-
-        spamDecayTimers.delete(key);
+        try {
+            db.prepare(`
+                DELETE FROM warns WHERE guildId = ? AND userId = ? AND type = 'spam'
+            `).run(guildId, userId);
+        } catch (error) {
+            console.error('Failed to expire spam warnings:', error);
+        } finally {
+            spamDecayTimers.delete(key);
+        }
     }, SPAM_WARN_DECAY_MS);
 
     spamDecayTimers.set(key, timer);

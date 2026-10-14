@@ -11,6 +11,7 @@ module.exports = {
     async execute(message) {
         if (message.author.bot || !message.guild) return;
 
+        const member = await message.guild.members.fetch(message.author.id);
         const row = db.prepare(`
             SELECT * FROM levels WHERE guildId = ? AND userId = ?
         `).get(message.guild.id, message.author.id);
@@ -18,7 +19,6 @@ module.exports = {
         const now = Date.now();
         if (row && now - row.lastMessage < XP_COOLDOWN) return;
 
-        const member = await message.guild.members.fetch(message.author.id);
         const multiplier = getMultiplier(member);
         const gainedXp = Math.floor((Math.random() * (MAX_XP - MIN_XP + 1) + MIN_XP) * multiplier);
 

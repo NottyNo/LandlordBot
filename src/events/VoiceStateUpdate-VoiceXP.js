@@ -15,16 +15,8 @@ function awardVoiceXp(guildId, userId, member, minutesSpent) {
         SELECT * FROM levels WHERE guildId = ? AND userId = ?
     `).get(guildId, userId);
 
-    if (!row) {
-        db.prepare(`
-            INSERT INTO levels (guildId, userId, xp, level, lastMessage)
-            VALUES (?, ?, ?, 0, 0)
-        `).run(guildId, userId, gainedXp);
-        return;
-    }
-
-    const newXp = row.xp + gainedXp;
-    let newLevel = row.level;
+    const newXp = (row?.xp ?? 0) + gainedXp;
+    let newLevel = row?.level ?? 0;
     let leveledUp = false;
 
     while (newXp >= xpForLevel(newLevel)) {
@@ -33,8 +25,10 @@ function awardVoiceXp(guildId, userId, member, minutesSpent) {
     }
 
     db.prepare(`
-        UPDATE levels SET xp = ?, level = ? WHERE guildId = ? AND userId = ?
-    `).run(newXp, newLevel, guildId, userId);
+        INSERT INTO levels (guildId, userId, xp, level, lastMessage)
+        VALUES (?, ?, ?, ?, 0)
+        ON CONFLICT(guildId, userId) DO UPDATE SET xp = excluded.xp, level = excluded.level
+    `).run(guildId, userId, newXp, newLevel);
 
     if (leveledUp) {
         const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);

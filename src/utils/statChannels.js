@@ -116,7 +116,7 @@ function updateStatChannels(guild) {
     const elapsed = Date.now() - last;
 
     if (elapsed >= UPDATE_COOLDOWN_MS) {
-        performUpdate(guild);
+        performUpdate(guild).catch((error) => console.error('Stats update failed:', error));
         return;
     }
 
@@ -124,7 +124,7 @@ function updateStatChannels(guild) {
 
     const delay = UPDATE_COOLDOWN_MS - elapsed;
     const timer = setTimeout(() => {
-        performUpdate(guild);
+        performUpdate(guild).catch((error) => console.error('Stats update failed:', error));
         pendingUpdate.delete(guild.id);
     }, delay);
 

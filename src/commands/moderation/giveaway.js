@@ -62,7 +62,7 @@ module.exports = {
             const durationMs = parseDuration(durationStr);
             if (!durationMs || durationMs < 10000) {
                 return interaction.reply({
-                    content: 'Invalid duration. Use a format like `1d`, `12h`, `30m`, or `1d12h`.',
+                    content: 'Invalid duration. Use whole units like `1d`, `12h`, `30m`, or `1d12h`, between 10 seconds and 365 days.',
                     flags: MessageFlags.Ephemeral,
                 });
             }
@@ -105,7 +105,7 @@ module.exports = {
             if (!row) {
                 return interaction.reply({ content: 'Giveaway not found.', flags: MessageFlags.Ephemeral });
             }
-            if (row.ended) {
+            if (row.ended && row.announced) {
                 return interaction.reply({ content: 'That giveaway has already ended.', flags: MessageFlags.Ephemeral });
             }
 
@@ -121,6 +121,10 @@ module.exports = {
 
             if (!row || !row.ended) {
                 return interaction.reply({ content: 'That giveaway does not exist or has not ended yet.', flags: MessageFlags.Ephemeral });
+            }
+
+            if (!row.announced) {
+                return interaction.reply({ content: 'The original result is still waiting to be announced. Retry /giveaway end first.', flags: MessageFlags.Ephemeral });
             }
 
             const entries = db.prepare(`SELECT userId FROM giveaway_entries WHERE giveawayId = ?`).all(giveawayId)

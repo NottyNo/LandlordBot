@@ -83,11 +83,11 @@ db.exec(`
     );
 `);
 
-// Alterations go here.
-try { 
-    return;
-}
-catch (error) {
-    console.error('Error occurred while altering guild_settings table:', error);
+if (!db.pragma('table_info(giveaways)').some((column) => column.name === 'announced')) {
+    db.transaction(() => {
+        db.exec('ALTER TABLE giveaways ADD COLUMN announced INTEGER NOT NULL DEFAULT 0');
+        // Old completed giveaways must not be announced again on upgrade.
+        db.exec('UPDATE giveaways SET announced = 1 WHERE ended = 1');
+    })();
 }
 module.exports = db;

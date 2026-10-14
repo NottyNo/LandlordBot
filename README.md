@@ -1,6 +1,17 @@
 # NyraNetworkBot
 
 Personal Discord bot built with [discord.js](https://discord.js.org/) for a friends' server - moderation and utility commands.
+
+## Tests and maintenance
+
+Run `npm test` for the regression tests. They use in-memory SQLite databases and mocked Discord calls; they do not read credentials, connect to Discord, or change `data/nyra.db`.
+
+To repair previously incorrect levels, stop the bot and run `node src/scripts/fixLevels.js`. This recalculates levels from saved XP without logging into Discord. It cannot recover XP that was previously lost.
+
+Giveaway durations accept whole units (`1d12h`, `30m`, `10s`), from 10 seconds to 365 days. Winner selection uses an unbiased shuffle. Failed result deliveries retry every 30 seconds with the same saved winners, including after a restart. `/giveaway end` can retry a pending delivery immediately; rerolls wait until the original result is announced.
+
+The next startup automatically adds the announcement tracking column without deleting existing data. Previously ended giveaways are treated as already announced to avoid replaying old results; any historical missing announcements need manual review. Run one bot process per database. A crash after Discord accepts an announcement but before it is saved locally can cause a duplicate announcement on retry.
+
 ##  Features
 
 ###  Moderation
